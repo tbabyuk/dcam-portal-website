@@ -45,13 +45,18 @@ export const POST = async (request) => {
     // Determine which week columns to update
     const weekStatusColumn = week === "week1Submitted" ? "week_1_status" : "week_2_status"
     const weekNotesColumn = week === "week1Submitted" ? "week_1_notes" : "week_2_notes"
+    const weekPayColumn = week === "week1Submitted" ? "week_1_pay" : "week_2_pay"
 
     try {
         // ============ SUPABASE LOGIC ============
         // Upsert attendance records to Supabase
         for (const record of attendance) {
             const mappedStatus = mapStatusToEnum(record.status)
-            
+            // Pay is only earned for present or counted (absent_billable); absent = 0
+            const rowPay = (record.status === "present" || record.status === "counted")
+                ? (record.pay ?? 0)
+                : 0
+
             const { error } = await supabaseServer
                 .from('portal_attendance')
                 .upsert(
@@ -63,7 +68,8 @@ export const POST = async (request) => {
                         teacher_name: record.teacher_name,
                         payday: record.payday,
                         [weekStatusColumn]: mappedStatus,
-                        [weekNotesColumn]: teacherNotes || null
+                        [weekNotesColumn]: teacherNotes || null,
+                        [weekPayColumn]: rowPay
                     },
                     { onConflict: 'enrollment_id' }
                 )
