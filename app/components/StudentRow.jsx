@@ -31,10 +31,9 @@ export const StudentRow = ({student, index, setAttendance, setTotal, payday}) =>
     // Used to display correct attendance icon to user
     setAttendanceStatus(e.target.value)
 
-    // Updates attendance for all students for the current week and saves data to an object
-    // setAttendance((prev) => ({...prev, [student.name]: value}))
-    setAttendance((prev) => ([...prev, {
-      enrollment_id: student.id,  // This is the enrollment_id from actions.js
+    // Update attendance for this student (replace existing entry if they changed selection)
+    const record = {
+      enrollment_id: student.id,
       student_id: student.student_id,
       student_name: student.student_name,
       teacher_id: student.teacher_id,
@@ -43,7 +42,11 @@ export const StudentRow = ({student, index, setAttendance, setTotal, payday}) =>
       duration: student.duration,
       pay: student.pay,
       payday: payday
-    }]))
+    }
+    setAttendance((prev) => {
+      const withoutThisStudent = prev.filter((r) => r.enrollment_id !== student.id)
+      return [...withoutThisStudent, record]
+    })
   }
 
   

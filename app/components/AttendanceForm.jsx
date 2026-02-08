@@ -76,7 +76,7 @@ console.log("LOgging students from attendance form================", students)
             onChange={(e) => setTeacherNotes(e.target.value)}
         />
 
-        <button type="submit" className="submit-btn" disabled={students.length !== Object.keys(attendance).length}>Submit Attendance</button>
+        <button type="submit" className="submit-btn" disabled={!students?.length || attendance.length !== students.length}>Submit Attendance</button>
     </form>
   )
 }
