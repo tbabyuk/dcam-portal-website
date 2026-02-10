@@ -2,89 +2,104 @@ import { NextResponse } from "next/server"
 import nodemailer from "nodemailer"
 import { connectToStaffDB } from "@/db/database"
 import { Meta } from "@/models/models"
-import { getWeek } from "date-fns"
 
+// First Friday when the reset runs (Feb 20). Every other Friday after this.
+const ANCHOR_FRIDAY = new Date("2026-02-20T12:00:00.000Z")
 
-
-export const GET = async () => {
-
-    const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-            user: "terry@strictlywebdev.com",
-            pass: process.env.STRICTLY_EMAIL_APP_PASS
-        }
-    })
-
-    const mailOptions = {
-        from: "terry@strictlywebdev.com",
-        to: ["terry@dacapomusic.ca"],
-        subject: "Cron Job Ran",
-        html: `
-        <strong>Vercel cron job has run:</strong><br />
-        <small>This email should have been set at midnight on Monday</small>
-        `
-    }
-
-    try {
-        await transporter.sendMail(mailOptions);
-        return NextResponse.json({ message: "email was sent!" },{ status: 200 })
-
-    } catch (error) {
-        return NextResponse.json({message: "failed to send email"}, {status: 500})
-    }
+function getEstWeekday() {
+  return new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "long",
+  })
 }
 
+function getEstDateString() {
+  return new Date().toLocaleDateString("en-CA", {
+    timeZone: "America/New_York",
+  })
+}
 
+/** Returns true if today (EST) is a Friday that is exactly 0, 14, 28, ... days after ANCHOR_FRIDAY. */
+function isRunFridayEST() {
+  if (getEstWeekday() !== "Friday") return false
 
+  const todayStr = getEstDateString()
+  const thisFriday = new Date(todayStr + "T12:00:00.000Z")
+  const diffMs = thisFriday.getTime() - ANCHOR_FRIDAY.getTime()
+  const diffDays = Math.round(diffMs / (24 * 60 * 60 * 1000))
 
-// export const POST = async (request) => {
+  if (diffDays < 0) return false
+  return diffDays % 14 === 0
+}
 
-//     const {secret} = await request.json()
+export const GET = async (request) => {
+  // Only Vercel cron sends CRON_SECRET; reject all other callers (deploys, manual hits, bots).
+  const secret = process.env.CRON_SECRET
+  const authHeader = request.headers.get("authorization")
+  if (!secret || authHeader !== `Bearer ${secret}`) {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+  }
 
-//     if (!secret) {
-//         return NextResponse.json({ message: "Secret is required" }, { status: 400 })
-//     }
+  if (!isRunFridayEST()) {
+    return NextResponse.json(
+      {
+        message: "Skipped: not an every-other-Friday run day (EST).",
+        estDate: getEstDateString(),
+      },
+      { status: 200 }
+    )
+  }
 
-//     const isOddWeek = (date) => {
-//         const weekNumber = getWeek(date);  // Get the week number for the given date
-//         return weekNumber % 2 !== 0 ? true : false
-//     }
+  const transporter = nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user: "terry@strictlywebdev.com",
+      pass: process.env.STRICTLY_EMAIL_APP_PASS,
+    },
+  })
 
-//     const today = new Date();
+  const mailOptions = {
+    from: "terry@strictlywebdev.com",
+    to: ["terry@dacapomusic.ca"],
+    subject: "Cron Job Ran – Teacher Pay Period Reset",
+    html: `
+      <strong>Vercel cron job has run:</strong><br />
+      <small>Teacher submission and pay fields have been reset (every-other Friday EST).</small>
+    `,
+  }
 
-//     if(isOddWeek(today)) {
-//         return NextResponse.json({ message: "this week is odd, so no update is required" }, { status: 200 })
-//     }
+  try {
+    await connectToStaffDB()
 
-//     const transporter = nodemailer.createTransport({
-//         service: "gmail",
-//         auth: {
-//             user: "terry@strictlywebdev.com",
-//             pass: process.env.STRICTLY_EMAIL_APP_PASS
-//         }
-//     })
+    await Meta.updateMany(
+      { teacher: { $nin: ["demo1", "demo2", "demo3", "demo4", "demo5"] } },
+      {
+        $set: {
+          week1Submitted: false,
+          week2Submitted: false,
+          totalPay: 0,
+          week1Notes: "",
+          week2Notes: "",
+          week1Total: 0,
+          week2Total: 0,
+        },
+      }
+    )
 
-//     const mailOptions = {
-//         from: "terry@strictlywebdev.com",
-//         to: ["terry@dacapomusic.ca"],
-//         subject: "Cron Job Ran",
-//         html: `
-//         <strong>Zapier cron job has run:</strong><br />
-//         <small>Teacher work hours have been reset</small>
-//         `
-//     }
+    await transporter.sendMail(mailOptions)
 
-//     try {
-//         await connectToStaffDB()
-//         await Meta.updateMany(
-//             { teacher: { $nin: ['demo1', 'demo2', 'demo3', 'demo4', 'demo5'] } },  // update all teachers except these ones
-//             { $set: { week1Submitted: false, week2Submitted: false } } // set submitted fields to "false"
-//         )  
-//         await transporter.sendMail(mailOptions);
-//         return NextResponse.json({ message: "all submit fields updated successfully and email sent" },{ status: 200 })
-//     } catch (error) {
-//         console.log("Logging mongoDB error:", error)
-//         return NextResponse.json({message: "failed to update some or all fields or send email"}, {status: 500})
-//     }
-// }
+    return NextResponse.json(
+      {
+        message: "Meta reset completed and email sent.",
+        estDate: getEstDateString(),
+      },
+      { status: 200 }
+    )
+  } catch (error) {
+    console.error("Reset work hours error:", error)
+    return NextResponse.json(
+      { message: "Failed to reset Meta or send email" },
+      { status: 500 }
+    )
+  }
+}
