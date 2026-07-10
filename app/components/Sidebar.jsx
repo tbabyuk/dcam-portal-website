@@ -1,6 +1,6 @@
 "use client"
 
-import {HiOutlineClock, HiOutlineDocumentText} from "react-icons/hi"
+import {HiOutlineDocumentText} from "react-icons/hi"
 import { BsCheckCircleFill } from "react-icons/bs"
 import { MdSchool } from "react-icons/md";
 import { LuLayoutDashboard, LuCalendarCheck } from "react-icons/lu";
@@ -17,12 +17,6 @@ const routes = [
         icon: <LuLayoutDashboard size="1.2rem" />,
         href: "/dashboard",
         color: "text-sky-500",
-    },
-    {
-        label: "Log My Hours",
-        icon: <HiOutlineClock size="1.3rem" />,
-        href: "/attendance/week1",
-        color: "text-pink-700"
     },
     {
         label: "Availability",
